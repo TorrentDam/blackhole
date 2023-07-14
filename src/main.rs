@@ -2,9 +2,8 @@ use k8s_openapi::api::core::v1::{Container, ContainerPort, EnvVar, Pod, PodSpec}
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
 use kube::api::PostParams;
-use hightorrent::{InfoHash, MagnetLink};
+use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
-use std::fs;
 use std::fs::DirEntry;
 
 #[tokio::main]
@@ -15,21 +14,32 @@ async fn main() -> Result<(), kube::Error> {
     // 2. Check if pod for magnet link already exists
     // 2. Create a pod with a container that downloads the magnet link if it doesn't exist
 
-    let files: Vec<DirEntry> = fs::read_dir("/data/torrents").unwrap()
+    let files: Vec<DirEntry> = std::fs::read_dir("/data/torrents").unwrap()
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().unwrap().is_file())
         .collect();
 
+    let torrent_files: Vec<TorrentFile> = files.iter()
+        .filter(|entry| entry.path().extension().unwrap() == "torrent")
+        .map(|entry| entry.to_owned())
+        .map(|entry| std::fs::read(entry.path()).unwrap())
+        .map(|slice| TorrentFile::from_slice(&slice).unwrap())
+        .collect();
+
     let magnet_links: Vec<MagnetLink> = files.iter()
         .filter(|entry| entry.path().extension().unwrap() == "magnet")
-        .map(|entry| fs::read(entry.path()).unwrap())
+        .map(|entry| std::fs::read(entry.path()).unwrap())
         .map(|bytes| String::from_utf8(bytes).unwrap())
         .map(|string| url::Url::parse(&string).unwrap())
         .map(|url| MagnetLink::from_url(&url).unwrap())
         .collect();
 
-    let info_hashes: Vec<InfoHash> = magnet_links.iter()
-        .map(|magnet_link| magnet_link.hash().to_owned())
+    let info_hashes: Vec<String> = magnet_links.iter()
+        .map(|magnet_link| magnet_link.hash().as_str().to_owned())
+        .chain(
+            torrent_files.iter()
+            .map(|torrent_file| torrent_file.hash().to_owned())
+        )
         .collect();
 
     let client = Client::try_default().await?;
@@ -52,7 +62,7 @@ async fn main() -> Result<(), kube::Error> {
                     }]),
                     env: Some(vec![EnvVar {
                         name: "INFO_HASH".to_owned(),
-                        value: Some(info_hash.to_string()),
+                        value: Some(info_hash),
                         ..EnvVar::default()
                     }]),
                     ..Container::default()
