@@ -7,3 +7,5 @@ edition = "2021"
 kube = { version = "0.83.0", default-features= false, features = ["runtime", "derive", "client", "rustls-tls" ] }
 k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 tokio = { version = "1.16.1", features = ["full"] }
+url = { version = "2.4.0" }
+hightorrent = { version = "0.1.0" }

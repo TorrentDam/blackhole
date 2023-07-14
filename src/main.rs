@@ -2,6 +2,7 @@ use k8s_openapi::api::core::v1::{Container, ContainerPort, EnvVar, Pod, PodSpec}
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
 use kube::api::PostParams;
+use hightorrent::{InfoHash, MagnetLink};
 use std::string::String;
 use std::fs;
 use std::fs::DirEntry;
@@ -19,16 +20,22 @@ async fn main() -> Result<(), kube::Error> {
         .filter(|entry| entry.file_type().unwrap().is_file())
         .collect();
 
-    let magnet_links: Vec<String> = files.iter()
+    let magnet_links: Vec<MagnetLink> = files.iter()
         .filter(|entry| entry.path().extension().unwrap() == "magnet")
         .map(|entry| fs::read(entry.path()).unwrap())
         .map(|bytes| String::from_utf8(bytes).unwrap())
+        .map(|string| url::Url::parse(&string).unwrap())
+        .map(|url| MagnetLink::from_url(&url).unwrap())
+        .collect();
+
+    let info_hashes: Vec<InfoHash> = magnet_links.iter()
+        .map(|magnet_link| magnet_link.hash().to_owned())
         .collect();
 
     let client = Client::try_default().await?;
     let api: Api<Pod> = Api::namespaced(client, "media-server");
 
-    for magnet_link in magnet_links {
+    for info_hash in info_hashes {
         let pod: Pod = Pod {
             metadata: ObjectMeta {
                 name: Some("test-echo-server".to_owned()),
@@ -44,8 +51,8 @@ async fn main() -> Result<(), kube::Error> {
                         ..ContainerPort::default()
                     }]),
                     env: Some(vec![EnvVar {
-                        name: "MAGNET_LINK".to_owned(),
-                        value: Some(magnet_link),
+                        name: "INFO_HASH".to_owned(),
+                        value: Some(info_hash.to_string()),
                         ..EnvVar::default()
                     }]),
                     ..Container::default()
