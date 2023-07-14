@@ -48,7 +48,7 @@ async fn main() -> Result<(), kube::Error> {
     for info_hash in info_hashes {
         let pod: Pod = Pod {
             metadata: ObjectMeta {
-                name: Some("test-echo-server".to_owned()),
+                name: Some("blackhole-torrent-".to_owned() + &info_hash),
                 namespace: Some("media-server".to_owned()),
                 ..ObjectMeta::default()
             },
