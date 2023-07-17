@@ -17,10 +17,11 @@ use std::fs::{DirEntry};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
+// TODO:
+// 1. Clean up complete jobs?
+
 #[tokio::main]
 async fn main() -> Result<(), kube::Error> {
-    // TODO:
-    // 1. Move downloaded files to the "complete" directory
 
     let client = Client::try_default().await?;
     let job_api: Api<Job> = Api::namespaced(client, "media-server");
@@ -31,7 +32,7 @@ async fn main() -> Result<(), kube::Error> {
 }
 
 async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
-    let mut files: Vec<DirEntry> = std::fs::read_dir("/data/torrents").unwrap()
+    let mut files: Vec<DirEntry> = std::fs::read_dir("torrents").unwrap()
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().unwrap().is_file())
         .collect();
@@ -45,9 +46,12 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
     for source in info_hashes {
         let info_hash = &source.info_hash;
         let job_name: String = "blackhole-torrent-".to_owned() + info_hash;
+        let downloading_dir = format!("downloading/{}", source.file_name);
         if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
             if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
-                println!("Job {} succeeded, removing {}", job_name, source.path.to_str().unwrap());
+                let complete_dir = format!("complete/{}", source.file_name);
+                println!("Job {} succeeded, moving to {}", job_name, complete_dir);
+                std::fs::rename(&downloading_dir, &complete_dir).unwrap();
                 std::fs::remove_file(&source.path).unwrap();
             }
             continue;
@@ -67,7 +71,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 }]),
                 volume_mounts: Some(vec![VolumeMount {
                     name: "data".to_owned(),
-                    sub_path: Some("downloading".to_owned()),
+                    sub_path: Some(downloading_dir.clone()),
                     mount_path: "/data".to_owned(),
                     ..VolumeMount::default()
                 }]),
@@ -105,11 +109,13 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
 
 struct InfoHashSource {
     info_hash: String,
+    file_name: String,
     path: PathBuf,
 }
 
 impl InfoHashSource {
     fn from_file(file: &DirEntry) -> Option<InfoHashSource> {
+        let file_name = file.file_name().to_str()?.to_owned();
         let path = file.path();
         let info_hash =
             match file.path().extension()?.to_str()? {
@@ -127,6 +133,6 @@ impl InfoHashSource {
                 }
                 _ => return None,
             };
-        Some(InfoHashSource { info_hash, path })
+        Some(InfoHashSource { info_hash, file_name, path })
     }
 }
