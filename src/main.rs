@@ -13,7 +13,8 @@ use kube::{Api, Client};
 use kube::api::{ListParams, PostParams};
 use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
-use std::fs::DirEntry;
+use std::fs::{DirEntry};
+use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -30,48 +31,25 @@ async fn main() -> Result<(), kube::Error> {
 }
 
 async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
-    let files: Vec<DirEntry> = std::fs::read_dir("/data/torrents").unwrap()
+    let mut files: Vec<DirEntry> = std::fs::read_dir("/data/torrents").unwrap()
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().unwrap().is_file())
         .collect();
 
-    let torrent_files: Vec<TorrentFile> = files.iter()
-        .filter(|entry| entry.path().extension().unwrap() == "torrent")
-        .map(|entry| entry.to_owned())
-        .map(|entry| std::fs::read(entry.path()).unwrap())
-        .map(|slice| TorrentFile::from_slice(&slice).unwrap())
-        .collect();
+    let info_hashes: Vec<InfoHashSource> = files.iter_mut().filter_map(move |entry| {
+        InfoHashSource::from_file(entry)
+    }).collect();
 
-    println!("Discovered torrent files: {:?}", torrent_files.len());
+    let running_jobs: Vec<Job> = job_api.list(&ListParams::default()).await?.items;
 
-    let magnet_links: Vec<MagnetLink> = files.iter()
-        .filter(|entry| entry.path().extension().unwrap() == "magnet")
-        .map(|entry| std::fs::read(entry.path()).unwrap())
-        .map(|bytes| String::from_utf8(bytes).unwrap())
-        .map(|string| url::Url::parse(&string).unwrap())
-        .map(|url| MagnetLink::from_url(&url).unwrap())
-        .collect();
-
-    println!("Discovered magnet links: {:?}", magnet_links.len());
-
-    let info_hashes: Vec<String> = magnet_links.iter()
-        .map(|magnet_link| magnet_link.hash().as_str().to_owned())
-        .chain(
-            torrent_files.iter()
-                .map(|torrent_file| torrent_file.hash().to_owned())
-        )
-        .collect();
-
-    let running_jobs: Vec<String> =
-        job_api
-            .list(&ListParams::default()).await?
-            .items.into_iter()
-            .map(|job| job.metadata.name.unwrap())
-            .collect();
-
-    for info_hash in info_hashes {
-        let job_name: String = "blackhole-torrent-".to_owned() + &info_hash;
-        if running_jobs.contains(&job_name) {
+    for source in info_hashes {
+        let info_hash = &source.info_hash;
+        let job_name: String = "blackhole-torrent-".to_owned() + info_hash;
+        if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
+            if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
+                println!("Job {} succeeded, removing {}", job_name, source.path.to_str().unwrap());
+                std::fs::remove_file(&source.path).unwrap();
+            }
             continue;
         }
         println!("Creating job for downloading {}", info_hash);
@@ -123,4 +101,32 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
         job_api.create(&PostParams::default(), &job).await?;
     }
     Ok(())
+}
+
+struct InfoHashSource {
+    info_hash: String,
+    path: PathBuf,
+}
+
+impl InfoHashSource {
+    fn from_file(file: &DirEntry) -> Option<InfoHashSource> {
+        let path = file.path();
+        let info_hash =
+            match file.path().extension()?.to_str()? {
+                "torrent" => {
+                    let slice = std::fs::read(&path).ok()?;
+                    let torrent_file = TorrentFile::from_slice(&slice).ok()?;
+                    torrent_file.hash().to_owned()
+                }
+                "magnet" => {
+                    let bytes = std::fs::read(&path).ok()?;
+                    let utf8_string = String::from_utf8(bytes).ok()?;
+                    let url = url::Url::parse(&utf8_string).ok()?;
+                    let magnet_link = MagnetLink::from_url(&url).ok()?;
+                    magnet_link.hash().as_str().to_owned()
+                }
+                _ => return None,
+            };
+        Some(InfoHashSource { info_hash, path })
+    }
 }
