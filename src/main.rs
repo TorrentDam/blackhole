@@ -16,12 +16,15 @@ use std::string::String;
 use std::fs::{DirEntry};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
+use log::{info, LevelFilter};
 
 // TODO:
 // 1. Clean up complete jobs?
 
 #[tokio::main]
 async fn main() -> Result<(), kube::Error> {
+
+    env_logger::builder().filter_level(LevelFilter::Info).init();
 
     let client = Client::try_default().await?;
     let job_api: Api<Job> = Api::namespaced(client, "media-server");
@@ -50,13 +53,13 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
         if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
             if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
                 let complete_dir = format!("complete/{}", source.file_name);
-                println!("Job {} succeeded, moving to {}", job_name, complete_dir);
+                info!("Job {} succeeded, moving to {}", job_name, complete_dir);
                 std::fs::rename(&downloading_dir, &complete_dir).unwrap();
                 std::fs::remove_file(&source.path).unwrap();
             }
             continue;
         }
-        println!("Creating job for downloading {}", info_hash);
+        info!("Creating job for downloading {}", info_hash);
         let pod_spec: PodSpec = PodSpec {
             restart_policy: Some("Never".to_owned()),
             containers: vec![Container {
