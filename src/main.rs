@@ -50,13 +50,13 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
         if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
             if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
                 let complete_dir = format!("complete/{}", source.file_name);
-                info!("Job {} succeeded, moving to {}", job_name, complete_dir);
+                info!("Job {} succeeded, moving files to {}", job_name, complete_dir);
                 std::fs::rename(&downloading_dir, &complete_dir).unwrap();
                 std::fs::remove_file(&source.path).unwrap();
             }
             continue;
         }
-        info!("Creating job for downloading {}", info_hash);
+        info!("Creating job for downloading \"{}\" ({})", source.file_name, info_hash);
         let pod_spec: PodSpec = PodSpec {
             restart_policy: Some("Never".to_owned()),
             containers: vec![Container {
