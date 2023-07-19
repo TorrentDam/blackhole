@@ -1,12 +1,5 @@
-use k8s_openapi::api::core::v1::{
-    Container,
-    EnvVar,
-    PodSpec,
-    PodTemplateSpec,
-    Volume,
-    VolumeMount,
-    PersistentVolumeClaimVolumeSource,
-};
+use std::collections::BTreeMap;
+use k8s_openapi::api::core::v1::{Container, EnvVar, PodSpec, PodTemplateSpec, Volume, VolumeMount, PersistentVolumeClaimVolumeSource, ResourceRequirements};
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
@@ -15,12 +8,12 @@ use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
 use std::fs::{DirEntry};
 use std::path::PathBuf;
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use tokio::time::{sleep, Duration};
 use log::{info, LevelFilter};
 
 #[tokio::main]
 async fn main() -> Result<(), kube::Error> {
-
     env_logger::builder().filter_level(LevelFilter::Info).init();
 
     let client = Client::try_default().await?;
@@ -64,6 +57,12 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 image: Some("ghcr.io/torrentdam/cmd:latest".to_owned()),
                 args: Some(vec!["download".to_owned(), "--info-hash".to_owned(), info_hash.clone()]),
                 working_dir: Some("/data".to_owned()),
+                resources: Some(ResourceRequirements {
+                    requests: Some(BTreeMap::from([
+                        ("cpu".to_owned(), Quantity("2".to_owned()))
+                    ])),
+                    ..ResourceRequirements::default()
+                }),
                 env: Some(vec![EnvVar {
                     name: "INFO_HASH".to_owned(),
                     value: Some(info_hash.clone()),
