@@ -18,9 +18,6 @@ use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 use log::{info, LevelFilter};
 
-// TODO:
-// 1. Clean up complete jobs?
-
 #[tokio::main]
 async fn main() -> Result<(), kube::Error> {
 
@@ -97,6 +94,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 ..ObjectMeta::default()
             },
             spec: Some(JobSpec {
+                ttl_seconds_after_finished: Some(60),
                 template: PodTemplateSpec {
                     metadata: None,
                     spec: Some(pod_spec.clone()),
