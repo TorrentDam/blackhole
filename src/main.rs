@@ -38,7 +38,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
 
     for source in info_hashes {
         let info_hash = &source.info_hash;
-        let job_name: String = format!("blackhole-torrent-{}-", info_hash[0..6].to_owned());
+        let job_name: String = format!("blackhole-torrent-{}", info_hash[0..6].to_owned());
         let downloading_dir = format!("downloading/{}", source.file_name);
         if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
             if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
