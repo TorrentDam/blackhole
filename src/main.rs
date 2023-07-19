@@ -70,7 +70,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                     ..EnvVar::default()
                 }]),
                 volume_mounts: Some(vec![VolumeMount {
-                    name: "data".to_owned(),
+                    name: "movies".to_owned(),
                     sub_path: Some(downloading_dir.clone()),
                     mount_path: "/data".to_owned(),
                     ..VolumeMount::default()
@@ -78,7 +78,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 ..Container::default()
             }],
             volumes: Some(vec![Volume {
-                name: "data".to_owned(),
+                name: "movies".to_owned(),
                 persistent_volume_claim: Some(PersistentVolumeClaimVolumeSource {
                     claim_name: "movies".to_owned(),
                     ..PersistentVolumeClaimVolumeSource::default()
