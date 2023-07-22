@@ -58,8 +58,9 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 args: Some(vec!["download".to_owned(), "--info-hash".to_owned(), info_hash.clone()]),
                 working_dir: Some("/data".to_owned()),
                 resources: Some(ResourceRequirements {
-                    requests: Some(BTreeMap::from([
-                        ("cpu".to_owned(), Quantity("2".to_owned()))
+                    limits: Some(BTreeMap::from([
+                        ("cpu".to_owned(), Quantity("2".to_owned())),
+                        ("memory".to_owned(), Quantity("500M".to_owned())),
                     ])),
                     ..ResourceRequirements::default()
                 }),
