@@ -1,5 +1,6 @@
-use std::collections::BTreeMap;
-use k8s_openapi::api::core::v1::{Container, EnvVar, PodSpec, PodTemplateSpec, Volume, VolumeMount, PersistentVolumeClaimVolumeSource, ResourceRequirements};
+mod crd;
+
+use k8s_openapi::api::core::v1::{Container, EnvVar, PodSpec, PodTemplateSpec, Volume, VolumeMount, PersistentVolumeClaimVolumeSource};
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
@@ -8,23 +9,42 @@ use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
 use std::fs::{DirEntry};
 use std::path::PathBuf;
-use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use tokio::time::{sleep, Duration};
 use log::{info, LevelFilter};
+use kube::runtime::{reflector, watcher, watcher::Config, WatchStreamExt};
+use futures::{future, StreamExt};
+use kube::runtime::reflector::ObjectRef;
+use crate::crd::Blackhole;
 
 #[tokio::main]
 async fn main() -> Result<(), kube::Error> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
 
     let client = Client::try_default().await?;
-    let job_api: Api<Job> = Api::namespaced(client, "media-server");
+
+    let namespace = "media-server";
+
+    let blackhole_api: Api<Blackhole> = Api::namespaced(client.clone(), namespace);
+    let (reader, writer) = reflector::store::<Blackhole>();
+
+    let rf = reflector(writer, watcher(blackhole_api, Config::default()));
+    tokio::spawn(async move {
+        rf.applied_objects().for_each(|_| future::ready(())).await;
+    });
+
+    let job_api: Api<Job> = Api::namespaced(client, namespace);
     loop {
-        run(&job_api).await?;
+        let blackhole = reader.get(&ObjectRef::new("blackhole").within(namespace));
+        let Some(blackhole) = blackhole else {
+            info!("Blackhole CRD not found");
+            continue;
+        };
+        run(&job_api, &blackhole).await?;
         sleep(Duration::from_secs(10)).await;
     }
 }
 
-async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
+async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Error> {
     let mut files: Vec<DirEntry> = std::fs::read_dir("torrents").unwrap()
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().unwrap().is_file())
@@ -57,17 +77,7 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
                 image: Some("ghcr.io/torrentdam/cmd:latest".to_owned()),
                 args: Some(vec!["download".to_owned(), "--info-hash".to_owned(), info_hash.clone()]),
                 working_dir: Some("/data".to_owned()),
-                resources: Some(ResourceRequirements {
-                    requests: Some(BTreeMap::from([
-                        ("cpu".to_owned(), Quantity("2".to_owned())),
-                        ("memory".to_owned(), Quantity("500M".to_owned())),
-                    ])),
-                    limits: Some(BTreeMap::from([
-                        ("cpu".to_owned(), Quantity("2".to_owned())),
-                        ("memory".to_owned(), Quantity("1G".to_owned())),
-                    ])),
-                    ..ResourceRequirements::default()
-                }),
+                resources: blackhole.spec.resources.clone(),
                 env: Some(vec![EnvVar {
                     name: "INFO_HASH".to_owned(),
                     value: Some(info_hash.clone()),
@@ -100,8 +110,8 @@ async fn run(job_api: &Api<Job>) -> Result<(), kube::Error> {
             spec: Some(JobSpec {
                 ttl_seconds_after_finished: Some(60),
                 template: PodTemplateSpec {
-                    metadata: None,
                     spec: Some(pod_spec.clone()),
+                    ..PodTemplateSpec::default()
                 },
                 ..JobSpec::default()
             }),

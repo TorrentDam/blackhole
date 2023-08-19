@@ -3,11 +3,24 @@ name = "blackhole"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "blackhole"
+path = "src/main.rs"
+
+[[bin]]
+name = "crdgen"
+path = "src/crdgen.rs"
+
 [dependencies]
-kube = { version = "0.83.0", default-features= false, features = ["runtime", "derive", "client", "rustls-tls" ] }
-k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 tokio = { version = "1.16.1", features = ["full"] }
+futures = { version = "0.3.19", features = ["compat"] }
+kube = { version = "0.83.0", default-features= false, features = ["runtime", "derive", "client", "rustls-tls" ] }
+k8s-openapi = { version = "0.18.0", features = ["v1_26", "schemars"] }
 url = { version = "2.4.0" }
 hightorrent = { version = "0.1.0" }
 log = { version = "0.4.14" }
 env_logger = { version = "0.10.0" }
+schemars = { version = "0.8.12", features = ["chrono"] }
+serde = { version = "1.0.182", features = ["derive"] }
+serde_json = "1.0.70"
+serde_yaml = "0.9.22"
