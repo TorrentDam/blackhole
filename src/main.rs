@@ -34,13 +34,14 @@ async fn main() -> Result<(), kube::Error> {
 
     let job_api: Api<Job> = Api::namespaced(client, namespace);
     loop {
+        sleep(Duration::from_secs(10)).await;
+
         let blackhole = reader.get(&ObjectRef::new("blackhole").within(namespace));
         let Some(blackhole) = blackhole else {
             info!("Blackhole CRD not found");
             continue;
         };
         run(&job_api, &blackhole).await?;
-        sleep(Duration::from_secs(10)).await;
     }
 }
 
