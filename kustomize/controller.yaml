@@ -19,6 +19,7 @@ rules:
       - get
       - watch
       - list
+      - delete
   - apiGroups: ["torrentdam.org"]
     resources:
       - blackholes
