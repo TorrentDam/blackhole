@@ -5,7 +5,7 @@ use k8s_openapi::api::core::v1::{Container, EnvVar, PodSpec, PodTemplateSpec, Vo
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
-use kube::api::{DeleteParams, ListParams, PostParams};
+use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
 use std::fs::{DirEntry};
@@ -143,7 +143,12 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
             let found = expected_jobs.contains(job_name);
             if !found {
                 info!("Job {} will be deleted", job_name);
-                job_api.delete(job_name, &DeleteParams::default()).await?;
+                job_api.delete(
+                    job_name,
+                    &DeleteParams{
+                        propagation_policy: Some(PropagationPolicy::Background),
+                        ..DeleteParams::default()
+                }).await?;
             }
         }
     }
