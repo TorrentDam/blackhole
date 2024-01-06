@@ -1,10 +1,11 @@
 mod crd;
 
+use std::collections::HashSet;
 use k8s_openapi::api::core::v1::{Container, EnvVar, PodSpec, PodTemplateSpec, Volume, VolumeMount, PersistentVolumeClaimVolumeSource};
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{Api, Client};
-use kube::api::{ListParams, PostParams};
+use kube::api::{DeleteParams, ListParams, PostParams};
 use hightorrent::{MagnetLink, TorrentFile};
 use std::string::String;
 use std::fs::{DirEntry};
@@ -57,7 +58,7 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
 
     let running_jobs: Vec<Job> = job_api.list(&ListParams::default()).await?.items;
 
-    for source in info_hashes {
+    for source in info_hashes.iter().as_ref() {
         let info_hash = &source.info_hash;
         let job_name: String = format!("blackhole-torrent-{}", info_hash[0..6].to_owned());
         let downloading_dir = format!("downloading/{}", source.file_name);
@@ -121,6 +122,18 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
         };
         job_api.create(&PostParams::default(), &job).await?;
     }
+    let expected_jobs: HashSet<String> = info_hashes.iter()
+        .map(|info_hash| info_hash_to_job_name(&info_hash.info_hash))
+        .collect();
+    for job in running_jobs {
+        if let Some(job_name) = job.metadata.name.as_ref() {
+            let found = expected_jobs.contains(job_name);
+            if !found {
+                info!("Job {} will be deleted", job_name);
+                job_api.delete(job_name, &DeleteParams::default()).await?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -152,4 +165,8 @@ impl InfoHashSource {
             };
         Some(InfoHashSource { info_hash, file_name, path })
     }
+}
+
+fn info_hash_to_job_name(info_hash: &String) -> String {
+    format!("blackhole-torrent-{}", info_hash[0..6].to_owned())
 }
