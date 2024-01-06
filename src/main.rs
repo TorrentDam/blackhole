@@ -110,6 +110,7 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
             },
             spec: Some(JobSpec {
                 ttl_seconds_after_finished: Some(60),
+                active_deadline_seconds: Some(60 * 360), // 6 hours
                 template: PodTemplateSpec {
                     spec: Some(pod_spec.clone()),
                     ..PodTemplateSpec::default()
