@@ -46,6 +46,8 @@ async fn main() -> Result<(), kube::Error> {
     }
 }
 
+const JOB_PREFIX: &str = "blackhole-torrent";
+
 async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Error> {
     let mut files: Vec<DirEntry> = std::fs::read_dir("torrents").unwrap()
         .map(|entry| entry.unwrap())
@@ -56,11 +58,22 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
         InfoHashSource::from_file(entry)
     }).collect();
 
-    let running_jobs: Vec<Job> = job_api.list(&ListParams::default()).await?.items;
+    let running_jobs: Vec<Job> = job_api.list(&ListParams::default()).await?
+        .items
+        .into_iter()
+        .filter(|job|
+            job.metadata.name
+                .iter()
+                .find(|name|
+                    name.starts_with(JOB_PREFIX)
+                )
+                .is_some()
+        )
+        .collect();
 
     for source in info_hashes.iter().as_ref() {
         let info_hash = &source.info_hash;
-        let job_name: String = format!("blackhole-torrent-{}", info_hash[0..6].to_owned());
+        let job_name: String = format!("{}-{}", JOB_PREFIX, info_hash[0..6].to_owned());
         let downloading_dir = format!("downloading/{}", source.file_name);
         if let Some(job) = running_jobs.iter().find(|job| job.metadata.name.as_ref() == Some(&job_name)) {
             if job.status.as_ref().is_some_and(|status| status.succeeded == Some(1)) {
@@ -168,5 +181,5 @@ impl InfoHashSource {
 }
 
 fn info_hash_to_job_name(info_hash: &String) -> String {
-    format!("blackhole-torrent-{}", info_hash[0..6].to_owned())
+    format!("{}-{}", JOB_PREFIX, info_hash[0..6].to_owned())
 }
