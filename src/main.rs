@@ -90,7 +90,14 @@ async fn run(job_api: &Api<Job>, blackhole: &Blackhole) -> Result<(), kube::Erro
             containers: vec![Container {
                 name: "echo".to_owned(),
                 image: Some("ghcr.io/torrentdam/cmd:latest".to_owned()),
-                args: Some(vec!["download".to_owned(), "--info-hash".to_owned(), info_hash.clone()]),
+                args: Some(vec![
+                  "torrent".to_owned(),
+                  "download".to_owned(),
+                  "--info-hash".to_owned(),
+                  info_hash.clone(),
+                  "--dht-node".to_owned(),
+                  "server.dht.svc.cluster.local:6881".to_owned(),
+                ]),
                 working_dir: Some("/data".to_owned()),
                 resources: blackhole.spec.resources.clone(),
                 env: Some(vec![EnvVar {
