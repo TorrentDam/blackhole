@@ -10,9 +10,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Build release
-        run: |
-          docker run --rm -v "$(pwd)":/home/rust/src messense/rust-musl-cross:x86_64-musl \
-            cargo build --release
+        run: cargo build --release
 
       - name: Set up Docker Buildx
         id: buildx
@@ -30,6 +28,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64,linux/amd64
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/torrentdam/blackhole:latest
