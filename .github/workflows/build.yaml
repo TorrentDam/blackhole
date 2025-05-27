@@ -11,7 +11,7 @@ jobs:
 
       - name: Build release
         run: |
-          docker run --rm -v "$(pwd)":/home/rust/src messense/rust-musl-cross:aarch64-musl \
+          docker run --rm -v "$(pwd)":/home/rust/src messense/rust-musl-cross:x86_64-musl \
             cargo build --release
 
       - name: Set up Docker Buildx
