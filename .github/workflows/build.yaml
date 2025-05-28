@@ -10,7 +10,12 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Build release
-        run: cargo build --release
+        run: |
+          docker run --rm -v "$(pwd)":/home/rust/src messense/rust-musl-cross:x86_64-musl \
+            cargo build --release
+
+      - name: Debug
+        run: ls target; ls target/release
 
       - name: Set up Docker Buildx
         id: buildx
